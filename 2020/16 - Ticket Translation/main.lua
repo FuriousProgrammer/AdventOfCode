@@ -13,6 +13,7 @@ while true do
 		max1 = tonumber(max1);
 		min2 = tonumber(min2);
 		max2 = tonumber(max2); 
+		solved = false;
 	}
 end
 
@@ -20,139 +21,104 @@ file:read("*l*l")
 yours = file:read("*l")
 file:read("*l*l")
 
-local ticketFields = {}
-for i = 1, #fields do
-	ticketFields[i] = {}
+local function find(t, v)
+	for i, check in pairs(t) do
+		if v == check then
+			return i
+		end
+	end
+	return nil
 end
--- NOTE: the problem DOES NOT state that your ticket is valid!
--- Therefor, it cannot be used to determine which field is in which column!
+local ticketFields
 
 local errors = 0
-while true do
-	line = file:read("*l")
-	if not line then break end
-
+local function validate(line)
 	local ticket = {}
+	local valid = true
+
 	for n in line:gmatch("(%d+)") do
 		n = tonumber(n)
-		local valid = false
+		local row = {}
+		ticket[#ticket + 1] = row
 
-		if ticket then ticket[#ticket + 1] = n end
-		for _, field in pairs(fields) do
-			if n >= field.min1 and n <= field.max1 or n >= field.min2 and n <= field.max2 then
-				valid = true
-				break
+		for fieldID, field in pairs(fields) do
+			if (n >= field.min1 and n <= field.max1) or (n >= field.min2 and n <= field.max2) then
+				row[#row + 1] = fieldID
 			end
 		end
 
-		if not valid then
+		if #row == 0 then
 			errors = errors + n
-			ticket = nil
+			valid = false
 		end
 	end
 
-	if ticket then
-		for i = 1, #fields do
-			table.insert(ticketFields[i], ticket[i])
+	if not valid then return end
+
+	if not ticketFields then ticketFields = ticket return end
+
+	for ticketID, data in pairs(ticket) do
+		local n = {}
+		local check = ticketFields[ticketID]
+
+		for _, fieldID in pairs(data) do
+			if find(check, fieldID) then
+				n[#n + 1] = fieldID
+			end
 		end
+
+		ticketFields[ticketID] = n
 	end
+end
+
+-- NOTE: the problem doesn't state whether YOUR ticket should be considered valid!
+-- I'm ASSUMING that it *is* a valid ticket, for a lil extra data! :D
+validate(yours)
+
+while true do
+	line = file:read("*l")
+	if not line then break end
+	validate(line)
 end
 
 print("Part 1:", errors)
 
 
--- 1) figure out which fields MIGHT correspond to the given column
--- 1.a) remove fields that have been determined to remove unnecesary computation
-local unknownFields = #fields
-local totalFields = #fields
-local determined = {}
-
-for col, vals in pairs(ticketFields) do
-	local possible = {} -- shallow copy of fields
-	local possibleCount = 0
-	for i, v in pairs(fields) do
-		possible[i] = v
-		possibleCount = possibleCount + 1
-	end
-
-	if possibleCount > 1 then
-		for _, n in pairs(vals) do
-			for i = 1, totalFields do
-				local field = possible[i]
-				if field then
-					if not (n >= field.min1 and n <= field.max1 or n >= field.min2 and n <= field.max2) then
-						possible[i] = nil
-						possibleCount = possibleCount - 1
-					end
-				end
-			end
-		end
-	end
-	if possibleCount == 1 then
-		for i, v in pairs(possible) do -- only runs once
-			determined[col] = v
-			fields[i] = nil
-		end
-		unknownFields = unknownFields - 1
-	else
-		determined[col] = {}
-		for i in pairs(possible) do
-			table.insert(determined[col], i)
-		end
-	end
-end
-
--- 2) if any ambiguity remains, remove determined fields from ambiguous lists until none remains.
 local stale = false
-while unknownFields > 0 do
-	if not stale then
-		stale = true
-		for i = 1, #determined do
-			if not determined[i].field then
-				local valid = {}
-				for _, id in pairs(determined[i]) do
-					if fields[id] then
-						valid[#valid + 1] = id
-					end
-				end
-				if #valid == 1 then
-					determined[i] = fields[i]
-					fields[i] = nil
-					unknownFields = unknownFields - 1
-					stale = false
-				else
-					determined[i] = valid
+while not stale do
+	stale = true
+	for ticketID, data in ipairs(ticketFields) do -- ipairs to avoid undefined behavior from changing ticketFields during iteration!
+		if #data ~= 0 then
+			local n = {}
+
+			for _, fieldID in pairs(data) do
+				if not fields[fieldID].solved then
+					n[#n + 1] = fieldID
 				end
 			end
+
+			if #n == 1 then
+				fields[n[1]].solved = ticketID
+				n = {}
+				stale = false
+			end
+			ticketFields[ticketID] = n
 		end
-	else --if stale
-		-- TODO: guess + check!
-		break
 	end
 end
+-- NOTE: my inputs (and likely ALL inputs) trivially reduce fully in the above loop, so no guess-and-check (or other, smarter algorithm) necessary!
 
 
-for i = 1, #determined do
-	io.write(i, ": ")
-	if determined[i].field then
-		print(determined[i].field)
-	else
-		print(table.concat(determined[i], ", "))
-	end 
-end
-
---[[
 local yourTicket = {}
 for n in yours:gmatch("(%d+)") do
-	yourTicket[#yourTicket+1] = tonumber(n)
-end	
+	yourTicket[#yourTicket + 1] = tonumber(n)
+end
 
 local part2 = 1
-for i = 1, #determined do
-	if determined[i].field:find("^departure") then
-		part2 = part2*yourTicket[i]
+for fieldID, field in pairs(fields) do
+	if field.field:find("^departure") then
+		part2 = part2*yourTicket[field.solved]
 	end
 end
 
 print("Part 2:", part2)
---]]
