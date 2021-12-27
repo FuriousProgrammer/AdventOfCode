@@ -23,16 +23,7 @@ end
 
 print("Part 1:", tosses*b.score)
 
--- aStart, bStart = 3, 7
-
-local winsUpper = {0, 0}
 local wins = {0, 0}
-local queue = {{
-	a = {space = aStart, score = 0, player = 1};
-	b = {space = bStart, score = 0, player = 2};
-	universes = 1;
-}}
-
 local rolls = {}
 for a = 1, 3 do
 	for b = 1, 3 do
@@ -43,7 +34,12 @@ for a = 1, 3 do
 	end
 end
 
-
+--[[ ~1.5 minutes
+local queue = {{
+	a = {space = aStart, score = 0, player = 1};
+	b = {space = bStart, score = 0, player = 2};
+	universes = 1;
+}}
 while #queue > 0 do
 	local turn = table.remove(queue)
 
@@ -69,13 +65,45 @@ while #queue > 0 do
 	end
 
 end
+--]]
 
-local totalMax
-if winsUpper[1] > winsUpper[2] then
-	totalMax = winsUpper[1] .. wins[1]
-elseif winsUpper[1] < winsUpper[2] then
-	totalMax = winsUpper[2] .. wins[2]
-else -- upper equal
-	totalMax = winsUpper[1] .. math.max( wins[1], wins[2] )
+--[[ ~17 seconds
+local function recurse(aSpace, aScore, aPlayer, bSpace, bScore, bPlayer, universes)
+	if bScore >= 21 then
+		wins[bPlayer] = wins[bPlayer] + universes
+		return
+	end
+
+	for roll, multiplier in pairs(rolls) do
+		newaSpace = (aSpace + roll)%10
+		newaScore = aScore + newaSpace + 1
+		recurse(bSpace, bScore, bPlayer, newaSpace, newaScore, aPlayer, universes*multiplier)
+	end
 end
-print("Part 2:", totalMax)
+recurse(aStart, 0, 1, bStart, 0, 2, 1)
+--]]
+
+-- [[ ~9 seconds
+local function recurse(aSpace, aScore, bSpace, bScore, universes)
+	for rollA, multiplierA in pairs(rolls) do
+		local newaSpace = (aSpace + rollA)%10
+		local newaScore = aScore + newaSpace + 1
+		if newaScore >= 21 then
+			wins[1] = wins[1] + universes*multiplierA
+		else
+			for rollB, multiplierB in pairs(rolls) do
+				local newbSpace = (bSpace + rollB)%10
+				local newbScore = bScore + newbSpace + 1
+				if newbScore >= 21 then
+					wins[2] = wins[2] + universes*multiplierA*multiplierB
+				else
+					recurse(newaSpace, newaScore, newbSpace, newbScore, universes*multiplierA*multiplierB)
+				end
+			end
+		end
+	end
+end
+recurse(aStart, 0, bStart, 0, 1)
+--]]
+
+print("Part 2:", string.format("%.0f", math.max( wins[1], wins[2] )))
